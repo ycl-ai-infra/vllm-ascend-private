@@ -57,6 +57,10 @@
 #include "attention/recurrent_gated_delta_rule_v310/recurrent_gated_delta_rule_310_torch_adpt.h"
 #include "attention/k2q_csr/k2q_csr_torch_adpt.h"
 #include "attention/msa_index_score/msa_index_score_torch_adpt.h"
+#ifdef VLLM_ASCEND_ENABLE_MSA_SPARSE_KERNELS
+#include "attention/msa_sparse_attention_fia/msa_sparse_attention_fia_torch_adpt.h"
+#include "attention/msa_sparse_attention_fia/msa_index_topk_torch_adpt.h"
+#endif
 #include "attention/store_kv_block/store_kv_block_torch_adpt.h"
 #include "attention/store_kv_block_metadata/store_kv_block_metadata_torch_adpt.cpp"
 #include "moe/dequant_situ_quant/dequant_situ_quant_torch_adpt.h"
@@ -3656,6 +3660,20 @@ TORCH_LIBRARY_EXPAND(CONCAT(_C, _ascend), ops)
     );
     ops.impl("npu_msa_index_score", torch::kPrivateUse1,
              &vllm_ascend::npu_msa_index_score);
+
+#ifdef VLLM_ASCEND_ENABLE_MSA_SPARSE_KERNELS
+    ops.def("npu_msa_index_decode_topk(Tensor score, Tensor context, int qlen, int topk, "
+            "int init_blocks=0, int local_blocks=0) -> (Tensor, Tensor, Tensor)");
+    ops.impl("npu_msa_index_decode_topk", torch::kPrivateUse1, &vllm_ascend::npu_msa_index_decode_topk);
+    ops.def("npu_msa_sparse_attention_fia_metadata(Tensor indices, Tensor table, Tensor counts, "
+            "Tensor prefix, Tensor lengths, int begin, int chunk, int page_count, int block_size) "
+            "-> (Tensor, Tensor, Tensor)");
+    ops.impl("npu_msa_sparse_attention_fia_metadata", torch::kPrivateUse1,
+             &vllm_ascend::npu_msa_sparse_attention_fia_metadata);
+    ops.def("npu_msa_sparse_attention_fia_finish(Tensor input, Tensor valid, Tensor(a!) output, int kv_heads) -> ()");
+    ops.impl("npu_msa_sparse_attention_fia_finish", torch::kPrivateUse1,
+             &vllm_ascend::npu_msa_sparse_attention_fia_finish);
+#endif
 
     ops.def(
         "npu_fused_lightning_indexer_manage("

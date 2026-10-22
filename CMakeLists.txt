@@ -66,6 +66,24 @@ else()
     )
 endif()
 
+if(SOC_VERSION MATCHES "^ascend950")
+    # Keep the A5 metadata/copy kernels separate from legacy ATB/direct kernels.
+    ascendc_library(vllm_ascend_msa_sparse_kernels SHARED
+        ${CMAKE_CURRENT_SOURCE_DIR}/csrc/attention/msa_sparse_attention_fia/msa_sparse_attention_fia_kernel.cpp
+        ${CMAKE_CURRENT_SOURCE_DIR}/csrc/attention/msa_sparse_attention_fia/msa_index_topk_kernel.cpp
+    )
+    if(TARGET vllm_ascend_msa_sparse_kernels_preprocess)
+        # CANN 9.2's legacy preprocessor relinks objects in place. Regenerate
+        # those intermediates so a second build does not relink an executable.
+        ExternalProject_Add_Step(vllm_ascend_msa_sparse_kernels_preprocess reset_preprocess_objects
+            COMMAND ${CMAKE_COMMAND} --build <BINARY_DIR> --target clean
+            DEPENDEES configure # codespell:ignore dependees
+            DEPENDERS build
+            ALWAYS TRUE
+        )
+    endif()
+endif()
+
 message("TORCH_NPU_PATH is ${TORCH_NPU_PATH}")
 
 if(SOC_VERSION MATCHES "ascend310p.*")
@@ -101,6 +119,11 @@ set(
 )
 
 pybind11_add_module(vllm_ascend_C ${VLLM_ASCEND_SRC})
+if(TARGET vllm_ascend_msa_sparse_kernels)
+    target_compile_definitions(vllm_ascend_C PRIVATE VLLM_ASCEND_ENABLE_MSA_SPARSE_KERNELS)
+    target_link_libraries(vllm_ascend_C PRIVATE vllm_ascend_msa_sparse_kernels)
+    install(TARGETS vllm_ascend_msa_sparse_kernels DESTINATION ${VLLM_ASCEND_INSTALL_PATH})
+endif()
 if(SOC_VERSION MATCHES "ascend910_93.*")
   target_compile_definitions(vllm_ascend_C PRIVATE VLLM_ASCEND_ENABLE_SPARSE_KV_OFFLOAD)
   target_link_libraries(vllm_ascend_C PRIVATE OpenMP::OpenMP_CXX)

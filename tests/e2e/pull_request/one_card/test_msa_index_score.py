@@ -75,6 +75,8 @@ def _run_case(
     kv_lens: tuple[int, ...],
     table_width: int,
     page_axis_gap: int,
+    *,
+    capture_graph: bool = False,
 ) -> None:
     if dtype == torch.float8_e4m3fn and not _is_ascend_950():
         pytest.skip("FLOAT8_E4M3FN MsaIndexScore requires Ascend 950")
@@ -118,7 +120,7 @@ def _run_case(
     actual_seq_qlen = _prefix_sum(q_lens)
     actual_seq_klen = torch.tensor(kv_lens, dtype=torch.int32)
     start_loc = torch.tensor(
-        [max(0, math.ceil(length / BLOCK_SIZE) - 1) for length in kv_lens],
+        [max(0, (kv_len - q_len) // BLOCK_SIZE) for q_len, kv_len in zip(q_lens, kv_lens)],
         dtype=torch.int32,
     )
     atten_mask = torch.zeros((2048, 2048), dtype=torch.int8, device="npu")
@@ -137,20 +139,35 @@ def _run_case(
         )
     )
 
-    actual = torch.ops._C_ascend.npu_msa_index_score(
+    # Allocate all input buffers before capture so replay retains their storage.
+    op_args = (
         query,
         key,
         block_table.npu(),
         start_loc.npu(),
-        atten_mask=atten_mask,
-        actual_seq_qlen=actual_seq_qlen.npu(),
-        actual_seq_klen=actual_seq_klen.npu(),
-        layout_key="BBND",
-        sparse_mode=3,
-        init_blocks=0,
-        local_blocks=0,
     )
+    op_kwargs = {
+        "atten_mask": atten_mask,
+        "actual_seq_qlen": actual_seq_qlen.npu(),
+        "actual_seq_klen": actual_seq_klen.npu(),
+        "layout_key": "BBND",
+        "sparse_mode": 3,
+        "init_blocks": 0,
+        "local_blocks": 0,
+    }
+    actual = torch.ops._C_ascend.npu_msa_index_score(*op_args, **op_kwargs)
     torch.npu.synchronize()
+    if capture_graph:
+        eager_cpu = actual.float().cpu()
+        graph = torch.npu.NPUGraph()
+        with torch.npu.graph(graph):
+            actual = torch.ops._C_ascend.npu_msa_index_score(*op_args, **op_kwargs)
+        for _ in range(2):
+            # Erase captured output to prove each replay executes the kernel.
+            actual.zero_()
+            graph.replay()
+            torch.npu.synchronize()
+            torch.testing.assert_close(actual.float().cpu(), eager_cpu, rtol=0, atol=0)
 
     actual_cpu = actual.float().cpu()
     expected_cpu = torch.from_numpy(expected)
@@ -177,9 +194,16 @@ def _run_case(
         pytest.param(torch.float16, (32, 17), (300, 130), 8, 1, id="fp16-prefill"),
         pytest.param(torch.bfloat16, (32, 17), (300, 130), 8, 1, id="bf16-prefill"),
         pytest.param(torch.bfloat16, (32, 17), (300, 130), 8, 2, id="bf16-strided-page-axis"),
+        pytest.param(torch.bfloat16, (1, 1, 1, 1), (127, 128, 129, 257), 8, 1, id="bf16-decode-block-boundaries"),
+        pytest.param(torch.bfloat16, (1, 1), (129, 0), 8, 1, id="bf16-decode-zero-kv-padding"),
         pytest.param(torch.float8_e4m3fn, (32, 17), (300, 130), 8, 1, id="fp8-prefill"),
         pytest.param(torch.float8_e4m3fn, (32, 17), (300, 130), 8, 2, id="fp8-strided-page-axis"),
         pytest.param(torch.float8_e4m3fn, (1, 1, 1, 1), (900, 512, 129, 1), 8, 1, id="fp8-decode"),
+        pytest.param(torch.float8_e4m3fn, (1, 1), (129, 0), 8, 1, id="fp8-decode-zero-kv-padding"),
+        pytest.param(torch.float8_e4m3fn, (2, 2, 2), (127, 128, 129), 8, 1, id="fp8-decode-two-token-block-boundaries"),
+        pytest.param(
+            torch.float8_e4m3fn, (4, 4, 4), (127, 128, 129), 8, 2, id="fp8-decode-four-token-strided-boundaries"
+        ),
         pytest.param(torch.float8_e4m3fn, (2,), (5,), 257, 1, id="fp8-wide-block-table"),
     ],
 )
@@ -192,3 +216,9 @@ def test_msa_index_score_matches_cpu_golden(
     page_axis_gap: int,
 ) -> None:
     _run_case(dtype, q_lens, kv_lens, table_width, page_axis_gap)
+
+
+@pytest.mark.parametrize("dtype", [torch.bfloat16, torch.float8_e4m3fn], ids=["bf16", "fp8"])
+@torch.inference_mode()
+def test_msa_index_score_aclgraph_decode_matches_cpu_golden(dtype: torch.dtype) -> None:
+    _run_case(dtype, (2, 2), (129, 257), 8, 1, capture_graph=True)
