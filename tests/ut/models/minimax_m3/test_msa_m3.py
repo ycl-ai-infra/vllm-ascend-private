@@ -2447,9 +2447,17 @@ def test_sparse_attn_prefill_a5_uses_fp8_inputs(
     assert args[11] == 4
 
 
-@pytest.mark.parametrize("dtype", [torch.bfloat16, torch.float8_e4m3fn])
+@pytest.mark.parametrize(
+    "device_type,dtype",
+    [
+        (AscendDeviceType.A3, torch.bfloat16),
+        (AscendDeviceType.A5, torch.bfloat16),
+        (AscendDeviceType.A5, torch.float8_e4m3fn),
+    ],
+)
 @pytest.mark.parametrize("cache_layout", ["tensor", "tuple", "list"])
 def test_sparse_attn_prefill_missing_split_kv_uses_cann_gbsa(
+    device_type,
     dtype,
     cache_layout,
     mock_gbsa_ops: tuple[MagicMock, MagicMock],
@@ -2466,9 +2474,7 @@ def test_sparse_attn_prefill_missing_split_kv_uses_cann_gbsa(
     gbsa_metadata_op.return_value = metadata
     gbsa_attention_op.return_value = (torch.ones_like(q), torch.empty(0))
     with (
-        patch.object(
-            msa_m3_npu_module, "get_current_hardware_profile", return_value=get_hardware_profile(AscendDeviceType.A5)
-        ),
+        patch.object(msa_m3_npu_module, "get_current_hardware_profile", return_value=get_hardware_profile(device_type)),
         patch.object(msa_m3_npu_module, "_is_minimax_sparse_attention_split_kv_available", return_value=False),
         patch.object(msa_m3_npu_module, "_npu_k2q_csr") as k2q,
         patch("torch.ops._C_ascend.npu_sparse_attention_score_prefill", create=True) as split_kv,

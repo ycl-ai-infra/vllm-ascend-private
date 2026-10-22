@@ -14,7 +14,7 @@ from vllm.triton_utils import tl, triton
 
 from vllm_ascend.ops.triton.triton_utils import extract_slice, insert_slice
 
-FP8_E4M3_MAX: tl.constexpr = 448.0
+FP8_E4M3_MAX = tl.constexpr(448.0)
 
 
 @triton.jit
