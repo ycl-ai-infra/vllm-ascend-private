@@ -368,10 +368,15 @@ class QKNormRopeFusionPass(VllmInductorPass):
     def uuid(self) -> str:
         if get_current_hardware_profile().device_adaptor_family != DeviceAdaptorFamily.FP8_OPTIMIZED:
             return super().uuid()
-        # The base UUID only hashes this pass class. Include the A5 rewrite
-        # and its checks so a cached draft graph cannot retain the old order.
-        return self.hash_source(
-            type(self),
+        return self.source_hash()
+
+    @classmethod
+    def source_hash(cls) -> str:
+        # AscendCompiler also needs this hash: npugraph_ex's serialized cache
+        # does not consume individual pass UUIDs. Avoid constructing a pass,
+        # which would register patterns and allocate NPU example tensors.
+        return cls.hash_source(
+            cls,
             BasePattern,
             QKNormRopeFusionPattern,
             GemmaQKNormRopeFusionPattern,
