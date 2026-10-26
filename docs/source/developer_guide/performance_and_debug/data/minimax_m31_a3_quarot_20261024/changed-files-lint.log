@@ -1,0 +1,16 @@
+ruff check...............................................................Passed
+ruff format..............................................................Passed
+codespell................................................................Passed
+typos....................................................................Passed
+markdownlint.............................................................Passed
+Enforce __init__.py in Python packages...................................Passed
+Check for boolean ops in with-statements.................................Passed
+Check that new functions over 100 lines have comments.......................Failed
+- hook id: check-long-functions
+- exit code: 9009
+
+Python was not found; run without arguments to install from the Microsoft Store, or disable this shortcut from Settings > Apps > Advanced app settings > App execution aliases.
+
+
+Windows python3 hook launcher unavailable; running the same checker with the explicit Python executable.
+Explicit-Python fallback exit: 0

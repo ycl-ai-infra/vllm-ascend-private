@@ -1,0 +1,427 @@
+============================= test session starts ==============================
+platform linux -- Python 3.11.10, pytest-8.4.2, pluggy-1.7.0 -- /usr/local/python3.11.10/bin/python
+cachedir: .pytest_cache
+rootdir: /mnt/share/y00976694/M3.1-Flash/standalone-20261024-1608/pr18-audit
+plugins: xdist-3.6.1, cov-7.1.0, asyncio-1.4.0, mock-3.17.0, platformdirs-4.13.5, anyio-4.15.1
+asyncio: mode=Mode.STRICT, debug=False, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function
+collecting ... collected 7 items
+
+test_checkpoint_router_norm_equivalence.py::test_inverse_norm_scaling_preserves_router PASSED
+test_checkpoint_router_norm_equivalence.py::test_exact_column_fit_can_hide_norm_mismatch[0.16] PASSED
+test_checkpoint_router_norm_equivalence.py::test_exact_column_fit_can_hide_norm_mismatch[0.2] PASSED
+test_checkpoint_router_norm_equivalence.py::test_reference_checkpoints_reproduce_35_differing_layers SKIPPED
+test_checkpoint_quarot_router_norm_equivalence.py::test_rotation_and_inverse_scaling_require_matching_norm[0.0] PASSED
+test_checkpoint_quarot_router_norm_equivalence.py::test_rotation_and_inverse_scaling_require_matching_norm[0.2] PASSED
+test_checkpoint_quarot_router_norm_equivalence.py::test_a3_checkpoints_reproduce_26_differing_layers {
+  "rotation": {
+    "block_count": 192,
+    "outside_nonzeros": 0,
+    "orthogonality_max_abs": 5.960464477539063e-08
+  },
+  "embedding_alignment_relative_l2": 0.0016561821103096008,
+  "layers": [
+    {
+      "norm_folded_rotated_basis_relative_l2": 0.19099922478199005,
+      "rotated_basis_router_column_fit_relative_l2": 1.4331951092572126e-07,
+      "random_input_fp32_forward_relative_l2": 0.19033941626548767,
+      "scale_times_gamma_minus_one_max_abs": 0.49486392736434937,
+      "layer": 3
+    },
+    {
+      "norm_folded_rotated_basis_relative_l2": 0.31959202885627747,
+      "rotated_basis_router_column_fit_relative_l2": 1.4172726992001117e-07,
+      "random_input_fp32_forward_relative_l2": 0.3209504187107086,
+      "scale_times_gamma_minus_one_max_abs": 0.7454565763473511,
+      "layer": 4
+    },
+    {
+      "norm_folded_rotated_basis_relative_l2": 0.31835392117500305,
+      "rotated_basis_router_column_fit_relative_l2": 1.4225476263618475e-07,
+      "random_input_fp32_forward_relative_l2": 0.3203967809677124,
+      "scale_times_gamma_minus_one_max_abs": 1.1308038234710693,
+      "layer": 5
+    },
+    {
+      "norm_folded_rotated_basis_relative_l2": 0.1601901799440384,
+      "rotated_basis_router_column_fit_relative_l2": 1.4318725050088688e-07,
+      "random_input_fp32_forward_relative_l2": 0.16040201485157013,
+      "scale_times_gamma_minus_one_max_abs": 0.8371562957763672,
+      "layer": 6
+    },
+    {
+      "norm_folded_rotated_basis_relative_l2": 1.3334009452137252e-07,
+      "rotated_basis_router_column_fit_relative_l2": 1.4289415162238583e-07,
+      "random_input_fp32_forward_relative_l2": 2.022730996031896e-06,
+      "scale_times_gamma_minus_one_max_abs": 4.172325134277344e-07,
+      "layer": 7
+    },
+    {
+      "norm_folded_rotated_basis_relative_l2": 0.31551069021224976,
+      "rotated_basis_router_column_fit_relative_l2": 1.4393357616881985e-07,
+      "random_input_fp32_forward_relative_l2": 0.3138200044631958,
+      "scale_times_gamma_minus_one_max_abs": 0.8111253380775452,
+      "layer": 8
+    },
+    {
+      "norm_folded_rotated_basis_relative_l2": 1.3296201473167457e-07,
+      "rotated_basis_router_column_fit_relative_l2": 1.438196761682775e-07,
+      "random_input_fp32_forward_relative_l2": 1.9785322820098372e-06,
+      "scale_times_gamma_minus_one_max_abs": 3.5762786865234375e-07,
+      "layer": 9
+    },
+    {
+      "norm_folded_rotated_basis_relative_l2": 1.3338862459022494e-07,
+      "rotated_basis_router_column_fit_relative_l2": 1.4393302194548596e-07,
+      "random_input_fp32_forward_relative_l2": 1.981196646738681e-06,
+      "scale_times_gamma_minus_one_max_abs": 5.364418029785156e-07,
+      "layer": 10
+    },
+    {
+      "norm_folded_rotated_basis_relative_l2": 0.11732795834541321,
+      "rotated_basis_router_column_fit_relative_l2": 1.4321086894142354e-07,
+      "random_input_fp32_forward_relative_l2": 0.11839161068201065,
+      "scale_times_gamma_minus_one_max_abs": 0.47945642471313477,
+      "layer": 11
+    },
+    {
+      "norm_folded_rotated_basis_relative_l2": 0.16627304255962372,
+      "rotated_basis_router_column_fit_relative_l2": 1.4343373777592205e-07,
+      "random_input_fp32_forward_relative_l2": 0.1705280989408493,
+      "scale_times_gamma_minus_one_max_abs": 0.7555476427078247,
+      "layer": 12
+    },
+    {
+      "norm_folded_rotated_basis_relative_l2": 0.13418619334697723,
+      "rotated_basis_router_column_fit_relative_l2": 1.4351870447626425e-07,
+      "random_input_fp32_forward_relative_l2": 0.13485482335090637,
+      "scale_times_gamma_minus_one_max_abs": 0.5745843648910522,
+      "layer": 13
+    },
+    {
+      "norm_folded_rotated_basis_relative_l2": 0.12136382609605789,
+      "rotated_basis_router_column_fit_relative_l2": 1.439610173292749e-07,
+      "random_input_fp32_forward_relative_l2": 0.11876898258924484,
+      "scale_times_gamma_minus_one_max_abs": 0.5369589328765869,
+      "layer": 14
+    },
+    {
+      "norm_folded_rotated_basis_relative_l2": 1.4132189107840532e-07,
+      "rotated_basis_router_column_fit_relative_l2": 1.4275684634412755e-07,
+      "random_input_fp32_forward_relative_l2": 1.978374712052755e-06,
+      "scale_times_gamma_minus_one_max_abs": 3.5762786865234375e-07,
+      "layer": 15
+    },
+    {
+      "norm_folded_rotated_basis_relative_l2": 1.4579278229120973e-07,
+      "rotated_basis_router_column_fit_relative_l2": 1.4320579566629021e-07,
+      "random_input_fp32_forward_relative_l2": 1.998790139623452e-06,
+      "scale_times_gamma_minus_one_max_abs": 4.76837158203125e-07,
+      "layer": 16
+    },
+    {
+      "norm_folded_rotated_basis_relative_l2": 1.421357183062355e-07,
+      "rotated_basis_router_column_fit_relative_l2": 1.4327353881071758e-07,
+      "random_input_fp32_forward_relative_l2": 1.9762571810133522e-06,
+      "scale_times_gamma_minus_one_max_abs": 4.76837158203125e-07,
+      "layer": 17
+    },
+    {
+      "norm_folded_rotated_basis_relative_l2": 1.4524248115321825e-07,
+      "rotated_basis_router_column_fit_relative_l2": 1.4105235379702208e-07,
+      "random_input_fp32_forward_relative_l2": 2.0163849967502756e-06,
+      "scale_times_gamma_minus_one_max_abs": 4.172325134277344e-07,
+      "layer": 18
+    },
+    {
+      "norm_folded_rotated_basis_relative_l2": 1.4674733961328457e-07,
+      "rotated_basis_router_column_fit_relative_l2": 1.4230862177555537e-07,
+      "random_input_fp32_forward_relative_l2": 2.0361972019600216e-06,
+      "scale_times_gamma_minus_one_max_abs": 4.172325134277344e-07,
+      "layer": 19
+    },
+    {
+      "norm_folded_rotated_basis_relative_l2": 1.4960134819830273e-07,
+      "rotated_basis_router_column_fit_relative_l2": 1.4372480450219882e-07,
+      "random_input_fp32_forward_relative_l2": 1.9491046714392724e-06,
+      "scale_times_gamma_minus_one_max_abs": 4.76837158203125e-07,
+      "layer": 20
+    },
+    {
+      "norm_folded_rotated_basis_relative_l2": 1.5461638724900695e-07,
+      "rotated_basis_router_column_fit_relative_l2": 1.432126168765535e-07,
+      "random_input_fp32_forward_relative_l2": 1.966044919754495e-06,
+      "scale_times_gamma_minus_one_max_abs": 4.76837158203125e-07,
+      "layer": 21
+    },
+    {
+      "norm_folded_rotated_basis_relative_l2": 0.17819978296756744,
+      "rotated_basis_router_column_fit_relative_l2": 1.4313069129912037e-07,
+      "random_input_fp32_forward_relative_l2": 0.17792128026485443,
+      "scale_times_gamma_minus_one_max_abs": 0.42664635181427,
+      "layer": 22
+    },
+    {
+      "norm_folded_rotated_basis_relative_l2": 1.5453498747319827e-07,
+      "rotated_basis_router_column_fit_relative_l2": 1.4307563844795368e-07,
+      "random_input_fp32_forward_relative_l2": 1.9662370505102444e-06,
+      "scale_times_gamma_minus_one_max_abs": 4.76837158203125e-07,
+      "layer": 23
+    },
+    {
+      "norm_folded_rotated_basis_relative_l2": 1.520440378044441e-07,
+      "rotated_basis_router_column_fit_relative_l2": 1.4284528049302025e-07,
+      "random_input_fp32_forward_relative_l2": 2.047404677796294e-06,
+      "scale_times_gamma_minus_one_max_abs": 5.364418029785156e-07,
+      "layer": 24
+    },
+    {
+      "norm_folded_rotated_basis_relative_l2": 0.41889411211013794,
+      "rotated_basis_router_column_fit_relative_l2": 1.4271097370510688e-07,
+      "random_input_fp32_forward_relative_l2": 0.4214732348918915,
+      "scale_times_gamma_minus_one_max_abs": 1.4540300369262695,
+      "layer": 25
+    },
+    {
+      "norm_folded_rotated_basis_relative_l2": 1.5159069732817443e-07,
+      "rotated_basis_router_column_fit_relative_l2": 1.428385871804494e-07,
+      "random_input_fp32_forward_relative_l2": 2.0297779883549083e-06,
+      "scale_times_gamma_minus_one_max_abs": 4.172325134277344e-07,
+      "layer": 26
+    },
+    {
+      "norm_folded_rotated_basis_relative_l2": 0.1159125491976738,
+      "rotated_basis_router_column_fit_relative_l2": 1.4192841035765014e-07,
+      "random_input_fp32_forward_relative_l2": 0.11463528126478195,
+      "scale_times_gamma_minus_one_max_abs": 0.5140866041183472,
+      "layer": 27
+    },
+    {
+      "norm_folded_rotated_basis_relative_l2": 1.5232008365728689e-07,
+      "rotated_basis_router_column_fit_relative_l2": 1.4377627621797728e-07,
+      "random_input_fp32_forward_relative_l2": 2.0258926269889344e-06,
+      "scale_times_gamma_minus_one_max_abs": 3.5762786865234375e-07,
+      "layer": 28
+    },
+    {
+      "norm_folded_rotated_basis_relative_l2": 1.5007270803835127e-07,
+      "rotated_basis_router_column_fit_relative_l2": 1.4281491189649387e-07,
+      "random_input_fp32_forward_relative_l2": 1.9901594896509778e-06,
+      "scale_times_gamma_minus_one_max_abs": 4.76837158203125e-07,
+      "layer": 29
+    },
+    {
+      "norm_folded_rotated_basis_relative_l2": 1.5100690120561922e-07,
+      "rotated_basis_router_column_fit_relative_l2": 1.4403785542072e-07,
+      "random_input_fp32_forward_relative_l2": 1.968554443010362e-06,
+      "scale_times_gamma_minus_one_max_abs": 4.76837158203125e-07,
+      "layer": 30
+    },
+    {
+      "norm_folded_rotated_basis_relative_l2": 0.10377337038516998,
+      "rotated_basis_router_column_fit_relative_l2": 1.4320524144295632e-07,
+      "random_input_fp32_forward_relative_l2": 0.10547887533903122,
+      "scale_times_gamma_minus_one_max_abs": 0.517885684967041,
+      "layer": 31
+    },
+    {
+      "norm_folded_rotated_basis_relative_l2": 0.15466850996017456,
+      "rotated_basis_router_column_fit_relative_l2": 1.4283958194027946e-07,
+      "random_input_fp32_forward_relative_l2": 0.15004664659500122,
+      "scale_times_gamma_minus_one_max_abs": 0.7002067565917969,
+      "layer": 32
+    },
+    {
+      "norm_folded_rotated_basis_relative_l2": 0.12161677330732346,
+      "rotated_basis_router_column_fit_relative_l2": 1.441914321276272e-07,
+      "random_input_fp32_forward_relative_l2": 0.12124016135931015,
+      "scale_times_gamma_minus_one_max_abs": 0.49926531314849854,
+      "layer": 33
+    },
+    {
+      "norm_folded_rotated_basis_relative_l2": 1.4996923880516988e-07,
+      "rotated_basis_router_column_fit_relative_l2": 1.4350634103266202e-07,
+      "random_input_fp32_forward_relative_l2": 1.994236754399026e-06,
+      "scale_times_gamma_minus_one_max_abs": 3.5762786865234375e-07,
+      "layer": 34
+    },
+    {
+      "norm_folded_rotated_basis_relative_l2": 1.489435987878096e-07,
+      "rotated_basis_router_column_fit_relative_l2": 1.4384971791514545e-07,
+      "random_input_fp32_forward_relative_l2": 1.982097955988138e-06,
+      "scale_times_gamma_minus_one_max_abs": 4.172325134277344e-07,
+      "layer": 35
+    },
+    {
+      "norm_folded_rotated_basis_relative_l2": 0.1751500517129898,
+      "rotated_basis_router_column_fit_relative_l2": 1.4367978451446106e-07,
+      "random_input_fp32_forward_relative_l2": 0.1709478795528412,
+      "scale_times_gamma_minus_one_max_abs": 0.5744692087173462,
+      "layer": 36
+    },
+    {
+      "norm_folded_rotated_basis_relative_l2": 0.13116540014743805,
+      "rotated_basis_router_column_fit_relative_l2": 1.4463685715782049e-07,
+      "random_input_fp32_forward_relative_l2": 0.13239479064941406,
+      "scale_times_gamma_minus_one_max_abs": 0.7318882942199707,
+      "layer": 37
+    },
+    {
+      "norm_folded_rotated_basis_relative_l2": 1.5077667114837823e-07,
+      "rotated_basis_router_column_fit_relative_l2": 1.438737058379047e-07,
+      "random_input_fp32_forward_relative_l2": 1.9649423848022707e-06,
+      "scale_times_gamma_minus_one_max_abs": 4.172325134277344e-07,
+      "layer": 38
+    },
+    {
+      "norm_folded_rotated_basis_relative_l2": 1.488983514263964e-07,
+      "rotated_basis_router_column_fit_relative_l2": 1.4286854366218904e-07,
+      "random_input_fp32_forward_relative_l2": 2.0261004465282895e-06,
+      "scale_times_gamma_minus_one_max_abs": 3.5762786865234375e-07,
+      "layer": 39
+    },
+    {
+      "norm_folded_rotated_basis_relative_l2": 0.1783280074596405,
+      "rotated_basis_router_column_fit_relative_l2": 1.433959226915249e-07,
+      "random_input_fp32_forward_relative_l2": 0.1768808364868164,
+      "scale_times_gamma_minus_one_max_abs": 0.6487358808517456,
+      "layer": 40
+    },
+    {
+      "norm_folded_rotated_basis_relative_l2": 0.11126521974802017,
+      "rotated_basis_router_column_fit_relative_l2": 1.435677461358864e-07,
+      "random_input_fp32_forward_relative_l2": 0.10844355076551437,
+      "scale_times_gamma_minus_one_max_abs": 0.5182527303695679,
+      "layer": 41
+    },
+    {
+      "norm_folded_rotated_basis_relative_l2": 1.4847779539195471e-07,
+      "rotated_basis_router_column_fit_relative_l2": 1.4435168793625053e-07,
+      "random_input_fp32_forward_relative_l2": 1.9724607227544766e-06,
+      "scale_times_gamma_minus_one_max_abs": 4.172325134277344e-07,
+      "layer": 42
+    },
+    {
+      "norm_folded_rotated_basis_relative_l2": 1.4777747026073484e-07,
+      "rotated_basis_router_column_fit_relative_l2": 1.4238420931178553e-07,
+      "random_input_fp32_forward_relative_l2": 2.0275679162296e-06,
+      "scale_times_gamma_minus_one_max_abs": 3.5762786865234375e-07,
+      "layer": 43
+    },
+    {
+      "norm_folded_rotated_basis_relative_l2": 1.480243980722662e-07,
+      "rotated_basis_router_column_fit_relative_l2": 1.439079113652042e-07,
+      "random_input_fp32_forward_relative_l2": 1.9792030343523948e-06,
+      "scale_times_gamma_minus_one_max_abs": 4.76837158203125e-07,
+      "layer": 44
+    },
+    {
+      "norm_folded_rotated_basis_relative_l2": 0.18648898601531982,
+      "rotated_basis_router_column_fit_relative_l2": 1.4316798058189306e-07,
+      "random_input_fp32_forward_relative_l2": 0.1871841549873352,
+      "scale_times_gamma_minus_one_max_abs": 0.4668782353401184,
+      "layer": 45
+    },
+    {
+      "norm_folded_rotated_basis_relative_l2": 1.456893699014472e-07,
+      "rotated_basis_router_column_fit_relative_l2": 1.4188242403179174e-07,
+      "random_input_fp32_forward_relative_l2": 1.9784215510298964e-06,
+      "scale_times_gamma_minus_one_max_abs": 3.5762786865234375e-07,
+      "layer": 46
+    },
+    {
+      "norm_folded_rotated_basis_relative_l2": 1.472794508572406e-07,
+      "rotated_basis_router_column_fit_relative_l2": 1.432595269079684e-07,
+      "random_input_fp32_forward_relative_l2": 1.9867300125042675e-06,
+      "scale_times_gamma_minus_one_max_abs": 4.172325134277344e-07,
+      "layer": 47
+    },
+    {
+      "norm_folded_rotated_basis_relative_l2": 0.1722714751958847,
+      "rotated_basis_router_column_fit_relative_l2": 1.42996583463173e-07,
+      "random_input_fp32_forward_relative_l2": 0.17136038839817047,
+      "scale_times_gamma_minus_one_max_abs": 0.43638157844543457,
+      "layer": 48
+    },
+    {
+      "norm_folded_rotated_basis_relative_l2": 1.4750527554951987e-07,
+      "rotated_basis_router_column_fit_relative_l2": 1.424089646206994e-07,
+      "random_input_fp32_forward_relative_l2": 2.013611037909868e-06,
+      "scale_times_gamma_minus_one_max_abs": 3.5762786865234375e-07,
+      "layer": 49
+    },
+    {
+      "norm_folded_rotated_basis_relative_l2": 0.1383751928806305,
+      "rotated_basis_router_column_fit_relative_l2": 1.417888171317827e-07,
+      "random_input_fp32_forward_relative_l2": 0.13769212365150452,
+      "scale_times_gamma_minus_one_max_abs": 0.481883704662323,
+      "layer": 50
+    },
+    {
+      "norm_folded_rotated_basis_relative_l2": 1.4730296982179425e-07,
+      "rotated_basis_router_column_fit_relative_l2": 1.4345587828756834e-07,
+      "random_input_fp32_forward_relative_l2": 2.012670165640884e-06,
+      "scale_times_gamma_minus_one_max_abs": 4.172325134277344e-07,
+      "layer": 51
+    },
+    {
+      "norm_folded_rotated_basis_relative_l2": 1.4715021734446054e-07,
+      "rotated_basis_router_column_fit_relative_l2": 1.4203693865511013e-07,
+      "random_input_fp32_forward_relative_l2": 1.98333782464033e-06,
+      "scale_times_gamma_minus_one_max_abs": 4.172325134277344e-07,
+      "layer": 52
+    },
+    {
+      "norm_folded_rotated_basis_relative_l2": 1.4755507038444193e-07,
+      "rotated_basis_router_column_fit_relative_l2": 1.4274479553932906e-07,
+      "random_input_fp32_forward_relative_l2": 2.017020278799464e-06,
+      "scale_times_gamma_minus_one_max_abs": 4.76837158203125e-07,
+      "layer": 53
+    },
+    {
+      "norm_folded_rotated_basis_relative_l2": 1.472509580935366e-07,
+      "rotated_basis_router_column_fit_relative_l2": 1.4323295260965097e-07,
+      "random_input_fp32_forward_relative_l2": 2.0471957213885617e-06,
+      "scale_times_gamma_minus_one_max_abs": 4.76837158203125e-07,
+      "layer": 54
+    },
+    {
+      "norm_folded_rotated_basis_relative_l2": 0.1918470859527588,
+      "rotated_basis_router_column_fit_relative_l2": 1.4324150754418952e-07,
+      "random_input_fp32_forward_relative_l2": 0.19968581199645996,
+      "scale_times_gamma_minus_one_max_abs": 0.7793158292770386,
+      "layer": 55
+    },
+    {
+      "norm_folded_rotated_basis_relative_l2": 0.24536475539207458,
+      "rotated_basis_router_column_fit_relative_l2": 1.4318828789328109e-07,
+      "random_input_fp32_forward_relative_l2": 0.2469024956226349,
+      "scale_times_gamma_minus_one_max_abs": 1.6042513847351074,
+      "layer": 56
+    },
+    {
+      "norm_folded_rotated_basis_relative_l2": 0.11077780276536942,
+      "rotated_basis_router_column_fit_relative_l2": 1.426384415026405e-07,
+      "random_input_fp32_forward_relative_l2": 0.11140177398920059,
+      "scale_times_gamma_minus_one_max_abs": 0.9685016870498657,
+      "layer": 57
+    },
+    {
+      "norm_folded_rotated_basis_relative_l2": 1.4722807861744514e-07,
+      "rotated_basis_router_column_fit_relative_l2": 1.4269383541432035e-07,
+      "random_input_fp32_forward_relative_l2": 2.018605528064654e-06,
+      "scale_times_gamma_minus_one_max_abs": 4.76837158203125e-07,
+      "layer": 58
+    },
+    {
+      "norm_folded_rotated_basis_relative_l2": 0.19110874831676483,
+      "rotated_basis_router_column_fit_relative_l2": 1.4228366751467547e-07,
+      "random_input_fp32_forward_relative_l2": 0.18999597430229187,
+      "scale_times_gamma_minus_one_max_abs": 0.6215317249298096,
+      "layer": 59
+    }
+  ]
+}
+PASSED
+
+- generated xml file: /mnt/share/y00976694/M3.1-Flash/standalone-20261024-1608/pr18-audit/a3-pr18-ut.xml -
+========================= 6 passed, 1 skipped in 9.77s =========================
