@@ -38,6 +38,10 @@ class BasePattern(ABC):
     def get_extra_stream_scope_check(self):
         return extra_stream_scope_check
 
+    def get_extra_check(self):
+        """Optional dependency check shared by both replacement backends."""
+        return None
+
     def pattern_key(self) -> str:
         return f"{self.__class__.__name__}_{self.eps}"
 
@@ -53,13 +57,27 @@ class BasePattern(ABC):
         replacement_fn = self.get_replacement()
         example_inputs = self.get_inputs()
 
-        pm.register_replacement(pattern_fn, replacement_fn, example_inputs, pm.fwd_only, pm_pass)
+        extra_check = self.get_extra_check()
+        if extra_check is None:
+            pm.register_replacement(pattern_fn, replacement_fn, example_inputs, pm.fwd_only, pm_pass)
+        else:
+            pm.register_replacement(
+                pattern_fn, replacement_fn, example_inputs, pm.fwd_only, pm_pass, extra_check=extra_check
+            )
+
+        stream_scope_check = self.get_extra_stream_scope_check()
+        if extra_check is None:
+            backend_extra_check = stream_scope_check
+        else:
+
+            def backend_extra_check(match):
+                return stream_scope_check(match) and extra_check(match)
 
         nge.register_replacement(
             search_fn=pattern_fn,
             replace_fn=replacement_fn,
             example_inputs=example_inputs,
-            extra_check=self.get_extra_stream_scope_check(),
+            extra_check=backend_extra_check,
         )
 
         # Mark this pattern as registered

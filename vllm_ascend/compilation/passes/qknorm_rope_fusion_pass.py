@@ -16,7 +16,8 @@
 # limitations under the License.
 #
 import torch
-from torch._inductor.pattern_matcher import PatternMatcherPass, PatternPrettyPrinter
+from torch._inductor.pattern_matcher import Match, PatternMatcherPass, PatternPrettyPrinter
+from torch.utils._pytree import tree_leaves
 from vllm.compilation.passes.vllm_inductor_pass import VllmInductorPass
 from vllm.config import VllmConfig, get_layers_from_vllm_config
 from vllm.config.compilation import Range
@@ -26,11 +27,31 @@ from vllm.triton_utils import HAS_TRITON
 
 from vllm_ascend.compilation.passes.base_pattern import BasePattern
 from vllm_ascend.device.device_op import DeviceOperator
-from vllm_ascend.device.hardware_profile import HardwareCapability, get_current_hardware_profile
+from vllm_ascend.device.hardware_profile import DeviceAdaptorFamily, HardwareCapability, get_current_hardware_profile
 from vllm_ascend.utils import get_rope_dim
 
 if HAS_TRITON:
     from vllm_ascend.ops.triton.linearnorm.split_qkv_rmsnorm_rope_vnorm import qkv_rmsnorm_rope_vnorm_fits_ub
+
+
+def _inputs_precede_outputs(match: Match) -> bool:
+    """Reject replacement inputs that would become forward references.
+
+    Multi-output replacements are inserted before their earliest output.
+    Gemma weight offsets shared with other consumers can stay outside the
+    complete Gemma pattern, so the generic RMSNorm patterns need this guard
+    as well. Reject only that match; leave the original operations intact.
+    """
+    outputs = [node for node in match.output_nodes() if isinstance(node, torch.fx.Node)]
+    if not outputs:
+        return False
+    positions = {node: index for index, node in enumerate(outputs[0].graph.nodes)}
+    first_output = min(positions[node] for node in outputs)
+    return all(
+        positions.get(node, first_output) < first_output
+        for node in tree_leaves((match.args, match.kwargs))
+        if isinstance(node, torch.fx.Node)
+    )
 
 
 class QKNormRopeFusionPattern(BasePattern):
@@ -43,6 +64,11 @@ class QKNormRopeFusionPattern(BasePattern):
         self.kv_size = self.num_kv_heads * self.head_dim
         self.device = vllm_config.device_config.device if vllm_config.device_config else None
         self.rope_dim = get_rope_dim(vllm_config)
+
+    def get_extra_check(self):
+        if get_current_hardware_profile().device_adaptor_family == DeviceAdaptorFamily.FP8_OPTIMIZED:
+            return _inputs_precede_outputs
+        return None
 
     def get_inputs(self):
         T = 5
@@ -107,6 +133,45 @@ class QKNormRopeFusionPattern(BasePattern):
         return replacement
 
 
+class GemmaQKNormRopeFusionPattern(QKNormRopeFusionPattern):
+    """Keep Gemma's weight offsets inside the multi-output replacement.
+
+    The matcher inserts the replacement before its earliest output, which is
+    normally the value split. Treating ``1 + weight`` as an external input can
+    therefore place the fused op before that input's producer. Rebuilding both
+    offsets in the replacement preserves their dependencies without reordering
+    unrelated nodes in the graph.
+    """
+
+    def get_pattern(self):
+        rms_pattern = super().get_pattern()
+
+        def pattern(
+            qkv: torch.Tensor,
+            q_weight: torch.Tensor,
+            k_weight: torch.Tensor,
+            cos_sin_cache: torch.Tensor,
+            positions: torch.Tensor,
+        ):
+            return rms_pattern(qkv, 1.0 + q_weight, 1.0 + k_weight, cos_sin_cache, positions)
+
+        return pattern
+
+    def get_replacement(self):
+        rms_replacement = super().get_replacement()
+
+        def replacement(
+            qkv: torch.Tensor,
+            q_weight: torch.Tensor,
+            k_weight: torch.Tensor,
+            cos_sin_cache: torch.Tensor,
+            positions: torch.Tensor,
+        ):
+            return rms_replacement(qkv, 1.0 + q_weight, 1.0 + k_weight, cos_sin_cache, positions)
+
+        return replacement
+
+
 class QKNormRopeFusionPatternWithBias(BasePattern):
     def __init__(self, vllm_config, head_dim, num_heads, num_kv_heads, eps=1e-6):
         super().__init__(vllm_config, eps)
@@ -117,6 +182,11 @@ class QKNormRopeFusionPatternWithBias(BasePattern):
         self.kv_size = self.num_kv_heads * self.head_dim
         self.device = vllm_config.device_config.device if vllm_config.device_config else None
         self.rope_dim = get_rope_dim(vllm_config)
+
+    def get_extra_check(self):
+        if get_current_hardware_profile().device_adaptor_family == DeviceAdaptorFamily.FP8_OPTIMIZED:
+            return _inputs_precede_outputs
+        return None
 
     def get_inputs(self):
         T = 5
@@ -295,6 +365,25 @@ class QKNormRopeFusionPass(VllmInductorPass):
     A pass for fusing QKV split and RMSNorm operations into a single qk_rmsnorm operator.
     """
 
+    def uuid(self) -> str:
+        if get_current_hardware_profile().device_adaptor_family != DeviceAdaptorFamily.FP8_OPTIMIZED:
+            return super().uuid()
+        return self.source_hash()
+
+    @classmethod
+    def source_hash(cls) -> str:
+        # AscendCompiler also needs this hash: npugraph_ex's serialized cache
+        # does not consume individual pass UUIDs. Avoid constructing a pass,
+        # which would register patterns and allocate NPU example tensors.
+        return cls.hash_source(
+            cls,
+            BasePattern,
+            QKNormRopeFusionPattern,
+            GemmaQKNormRopeFusionPattern,
+            QKNormRopeFusionPatternWithBias,
+            _inputs_precede_outputs,
+        )
+
     def __init__(self, vllm_config: VllmConfig):
         super().__init__(vllm_config)
         self.pattern_match_passes: PatternMatcherPass = PatternMatcherPass(pass_name="qknorm_rope_fusion_pass")
@@ -310,10 +399,25 @@ class QKNormRopeFusionPass(VllmInductorPass):
             logger.debug("QKNorm and Rope fusion enabled, but no Attention layers were discovered.")
             return
         layer = next(iter(attn_layers.values()))
+        # This adaptor expands Gemma RMSNorm into a weight offset followed by
+        # npu_rms_norm. Other adaptors retain their existing fusion patterns.
+        uses_gemma_weight_offsets = (
+            get_current_hardware_profile().device_adaptor_family == DeviceAdaptorFamily.FP8_OPTIMIZED
+        )
         for epsilon in [1e-6, 1e-5]:
             if layer.head_size != 128:
                 logger.debug("QKNorm and Rope fusion not enabled: head_dim %d is not equal of 128", layer.head_size)
                 continue
+            if uses_gemma_weight_offsets:
+                # Prefer the complete Gemma pattern over a generic RMSNorm
+                # match that would leave its weight-offset producers outside.
+                GemmaQKNormRopeFusionPattern(
+                    vllm_config=vllm_config,
+                    head_dim=layer.head_size,
+                    num_heads=layer.num_heads,
+                    num_kv_heads=layer.num_kv_heads,
+                    eps=epsilon,
+                ).register(self.pattern_match_passes)
             QKNormRopeFusionPattern(
                 vllm_config=vllm_config,
                 head_dim=layer.head_size,

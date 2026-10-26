@@ -33,6 +33,7 @@ from vllm.config.utils import Range
 from vllm.logger import logger
 
 from vllm_ascend.ascend_config import AscendCompilationConfig, get_ascend_config
+from vllm_ascend.device.hardware_profile import DeviceAdaptorFamily, get_current_hardware_profile
 from vllm_ascend.utils import COMPILATION_PASS_KEY
 
 
@@ -269,6 +270,15 @@ class AscendCompiler(CompilerInterface):
             "enable_static_kernel": ascend_compilation_config.enable_static_kernel,
             "enable_super_kernel": ascend_compilation_config.enable_super_kernel,
         }
+        if (
+            ascend_compilation_config.fuse_qknorm_rope
+            and get_current_hardware_profile().device_adaptor_family == DeviceAdaptorFamily.FP8_OPTIMIZED
+        ):
+            from vllm_ascend.compilation.passes.qknorm_rope_fusion_pass import QKNormRopeFusionPass
+
+            # Individual pass UUIDs do not enter npugraph_ex's cache key.
+            # Invalidate only the affected adaptor's QK fusion artifacts.
+            factors["qknorm_rope_fusion_source"] = QKNormRopeFusionPass.source_hash()
         logger.info("AscendCompiler hash factors: %s", factors)
         return sha256(str(factors).encode(), usedforsecurity=False).hexdigest()[:10]
 
