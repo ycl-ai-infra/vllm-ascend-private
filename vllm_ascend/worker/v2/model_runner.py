@@ -88,6 +88,7 @@ from vllm_ascend.distributed.kv_transfer.sparse_kv_offload.sparse_kv_offload_man
 from vllm_ascend.models.deepseek_v41.cache_config import uses_a5_packed_cache
 from vllm_ascend.ops.rotary_embedding import set_cos_and_sin, update_cos_sin
 from vllm_ascend.utils import (
+    embedding_tp_enable,
     is_deepseek_v41,
     is_pd_decode_recompute_scheduler_enabled,
     lmhead_tp_enable,
@@ -271,6 +272,36 @@ class NPUModelRunner(GPUModelRunner):
         aux_layers = get_pd_dspark_aux_layer_ids(self.vllm_config)
         super().load_model(load_dummy_weights, *args, **kwargs)
         self.pd_dspark_aux_layer_ids = aux_layers
+        # Eagerly create the embedding fine-grained exchange group's HCCL
+        # communicator. ProcessGroupHCCL initializes communicators lazily on
+        # the first collective; left lazy, the communicator is created at the
+        # first request/dummy run, where concurrent lazy group creations race
+        # (HCCL EI0019 port collisions) or deadlock inside the collective
+        # while peers have not ticked yet. Every rank executes load_model, so
+        # one capacity-sized exchange here builds the communicator
+        # deterministically before any traffic.
+        if embedding_tp_enable():
+            warm_mod = None
+            from vllm_ascend.ops.vocab_parallel_embedding import (
+                AscendVocabParallelEmbedding,
+            )
+
+            for _name, _mod in self.model.named_modules():
+                if (
+                    isinstance(_mod, AscendVocabParallelEmbedding)
+                    and getattr(_mod, "token_exchange_group", None) is not None
+                    and "language_model" in _name
+                ):
+                    warm_mod = _mod
+                    break
+            if warm_mod is not None:
+                warm_mod(
+                    torch.zeros(
+                        warm_mod.embedding_tp_capacity,
+                        dtype=torch.int64,
+                        device=self.device,
+                    )
+                )
 
     def _restore_replicated_draft_target_states(self) -> None:
         """Restore target states consumed by a replicated PCP draft."""
@@ -513,6 +544,34 @@ class NPUModelRunner(GPUModelRunner):
             skip_dp_coordination() if should_skip_allreduce_across_dp_group(self.vllm_config) else nullcontext()
         )
         forward_failed = True
+        if dummy_run and not is_profile and embedding_tp_enable():
+            # Embedding TP dummy join (mirrors the LM-head join below): real
+            # batches run the token exchange during input preparation (the
+            # model forward receives inputs_embeds), while idle dummy batches
+            # feed dummy embeddings directly and would otherwise skip the
+            # exchange, leaving the busy ranks' cross-DP collectives unpaired.
+            # Join at the group-agreed capacity so shapes match every step.
+            join_mod = getattr(self, "_embed_tp_join_module", None)
+            if join_mod is None:
+                from vllm_ascend.ops.vocab_parallel_embedding import (
+                    AscendVocabParallelEmbedding,
+                )
+
+                for _name, _mod in self.model.named_modules():
+                    if (
+                        isinstance(_mod, AscendVocabParallelEmbedding)
+                        and getattr(_mod, "token_exchange_group", None) is not None
+                        and "language_model" in _name
+                    ):
+                        join_mod = _mod
+                        break
+                self._embed_tp_join_module = join_mod
+            if join_mod is not None:
+                _dummy_ids = torch.zeros(
+                    join_mod.embedding_tp_capacity, dtype=torch.int64, device=self.device
+                )
+                join_mod(_dummy_ids)
+
         with dp_coordination_context:
             try:
                 output = super().execute_model(
