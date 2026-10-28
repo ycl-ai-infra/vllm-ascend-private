@@ -450,7 +450,9 @@ class MiniMaxM3SparseForConditionalGeneration(
                 yield name, weight
 
         logger.warning("MiniMax M3 VL load_weights entered")
-        loaded_params = loader.load_weights(counted_weights(), mapper=self.hf_to_vllm_mapper)
+        loaded_params = loader.load_weights(
+            self.language_model.model.prepare_weights_for_loading(counted_weights()), mapper=self.hf_to_vllm_mapper
+        )
         logger.warning(
             "MiniMax M3 VL load_weights saw %d checkpoint tensors by prefix %s; returned %d loaded parameter names",
             raw_tensors,

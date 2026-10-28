@@ -81,6 +81,45 @@ def get_dynamic_mx_quant_scale_alg(vllm_config=None) -> int:
     return 0
 
 
+def uses_minimax_mxfp8_fp32_reduction(vllm_config=None) -> bool:
+    """Use FP32 routed output/reduction for native MiniMax MXFP8 on A5.
+
+    MC2 combine accepts BF16/FP16, so this precision path needs the existing
+    AllGather/FP32 collective path. Scope it to native NVFP4-to-MXFP8 models
+    with EP sequence parallelism, whose final reduce-scatter precedes the BF16 cast.
+    """
+    # Lazy imports avoid config/quantization initialization cycles.
+    if vllm_config is None:
+        from vllm.config import get_current_vllm_config
+
+        try:
+            vllm_config = get_current_vllm_config()
+        except AssertionError:
+            return False
+    quant_config = getattr(vllm_config, "quant_config", None)
+    get_name = getattr(quant_config, "get_name", None)
+    if not callable(get_name) or get_name() not in ("mxfp8", "modelopt_mxfp8"):
+        return False
+    model_config = vllm_config.model_config
+    if getattr(model_config, "dtype", None) != torch.bfloat16:
+        return False
+    serialized = getattr(getattr(model_config, "hf_config", None), "quantization_config", None)
+    if not isinstance(serialized, dict) or serialized.get("moe_quant_algo") != "NVFP4":
+        return False
+    architectures = getattr(model_config, "architectures", ())
+    if isinstance(architectures, str):
+        architectures = (architectures,)
+    if not isinstance(architectures, (list, tuple)) or not any(
+        isinstance(name, str) and name.startswith("MiniMaxM3") for name in architectures
+    ):
+        return False
+    if not vllm_config.parallel_config.enable_expert_parallel or getattr(vllm_config, "lora_config", None) is not None:
+        return False
+    if not getattr(vllm_config.parallel_config, "use_sequence_parallel_moe", False):
+        return False
+    return get_current_hardware_profile().supports(HardwareCapability.DYNAMIC_MX_QUANT_SCALE_ALG_ONE)
+
+
 def get_model_file(
     model: str | Path,
     filename: str,

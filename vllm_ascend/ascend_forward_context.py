@@ -391,6 +391,12 @@ def select_moe_comm_method(
     if not is_moe_model(vllm_config):
         return None
 
+    # Import lazily: quantization schemes also depend on this forward context.
+    from vllm_ascend.quantization.utils import uses_minimax_mxfp8_fp32_reduction
+
+    if uses_minimax_mxfp8_fp32_reduction(vllm_config):
+        return MoECommType.ALLGATHER
+
     mc2_tokens_capacity = get_mc2_tokens_capacity()
     moe_comm_policy = get_current_hardware_profile().moe_comm_policy
     lora_config = getattr(vllm_config, "lora_config", None)

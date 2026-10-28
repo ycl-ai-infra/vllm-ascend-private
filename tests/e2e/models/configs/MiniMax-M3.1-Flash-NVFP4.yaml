@@ -1,0 +1,51 @@
+# Latest completed measurement: cohort 4; cohort 5 (FP32 reduction) pending.
+# AISBench evaluation record; not an lm_eval configuration.
+# Accuracy metrics are percentages. See the matching model tutorial for serving.
+model_name: "/models/MiniMax-M3.1-Flash"
+model_type: "aisbench"
+hardware: "Atlas A5 Series, 8 x Ascend 950DT"
+
+serve:
+  tensor_parallel_size: 4
+  data_parallel_size: 2
+  enable_expert_parallel: true
+  dtype: bfloat16
+  quantization: mxfp8
+  max_model_len: 133000
+  max_num_batched_tokens: 16384
+  max_num_seqs: 500
+  kv_cache_dtype: fp8
+  gpu_memory_utilization: 0.92
+  trust_remote_code: true
+  compilation_config:
+    cudagraph_mode: FULL_DECODE_ONLY
+
+tasks:
+- name: "GPQA_diamond"
+  metrics:
+  - name: "accuracy"
+    value: 83.33333333333333
+  - name: "accuracy_nontruncated"
+    value: 90.10989010989012
+  samples: 198
+  truncated: 16
+  nontruncated: 182
+  nontruncated_correct: 164
+  errors: 0
+
+num_fewshot: 0
+apply_chat_template: true
+batch_size: 32
+max_out_len: 36000
+generation_kwargs:
+  temperature: 0.6
+  top_p: 0.95
+  reasoning_effort: max
+  chat_template_kwargs:
+    reasoning_effort: max
+
+acceptance:
+  metric: accuracy_nontruncated
+  operator: ">"
+  value: 91.0
+  passed: false

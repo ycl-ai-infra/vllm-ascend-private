@@ -117,7 +117,13 @@ class AscendGemmaRMSNorm(GemmaRMSNorm):
                     x, residual, 1.0 + self.weight, None, self.variance_epsilon
                 )
             else:
-                x, _, residual = torch_npu.npu_add_rms_norm(x, residual, 1.0 + self.weight, self.variance_epsilon)
+                # Gemma applies the weight offset and normalized product in FP32.
+                # AddRmsNorm requires matching input/gamma dtypes on A5.
+                orig_dtype = x.dtype
+                x, _, residual = torch_npu.npu_add_rms_norm(
+                    x.float(), residual.float(), self.weight.float() + 1.0, self.variance_epsilon
+                )
+                x, residual = x.to(orig_dtype), residual.to(orig_dtype)
             return x, residual
 
         x = DeviceOperator.npu_gemma_rms_norm(x, self.weight, self.variance_epsilon)

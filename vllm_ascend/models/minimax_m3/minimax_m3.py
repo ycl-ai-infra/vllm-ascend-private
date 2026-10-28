@@ -97,7 +97,7 @@ from vllm.v1.kv_cache_interface import (
     get_kv_quant_mode,
 )
 
-from vllm_ascend.device.device_op import DeviceOperator
+from vllm_ascend.device.device_op import DeviceOperator, clipped_swiglu_torch
 from vllm_ascend.models.common.ops.sequence_parallel import (
     sp_all_gather,
     sp_padding_mask,
@@ -115,6 +115,7 @@ from vllm_ascend.models.minimax_m3.msa_m3 import (
     _register_m3_sparse_packed_modules,
     _use_fused_qkv_indexer,
 )
+from vllm_ascend.quantization.nvfp4_utils import NVFP4_BLOCK_SIZE, requantize_minimax_nvfp4_experts
 from vllm_ascend.utils import AscendDeviceType, get_ascend_device_type
 from vllm_ascend.worker.v2.pp_transport import (
     PPTransportDataType,
@@ -645,10 +646,7 @@ class MiniMaxM3SwiGLUOAI(nn.Module):
 
     def forward(self, x: torch.Tensor) -> torch.Tensor | tuple[torch.Tensor, torch.Tensor]:
         if self.use_mx_quant or get_ascend_device_type() == AscendDeviceType.A5:
-            d = x.shape[-1] // 2
-            gate = torch.clamp(x[..., :d], max=self.limit)
-            up = torch.clamp(x[..., d:], min=-self.limit, max=self.limit)
-            activated = gate * torch.sigmoid(self.alpha * gate) * (up + self.beta)
+            activated = clipped_swiglu_torch(x, self.limit, self.alpha, self.beta)
             if self.use_mx_quant:
                 quantized_x, scale = DeviceOperator.npu_dynamic_quant(
                     activated,
@@ -1117,6 +1115,18 @@ class MiniMaxM3Model(nn.Module, EagleModelMixin):
         cache_config = vllm_config.cache_config
         quant_config = vllm_config.quant_config
         self.config = config
+        checkpoint_quantization = getattr(model_config.hf_config, "quantization_config", None) or {}
+        self._native_nvfp4_moe = checkpoint_quantization.get("moe_quant_algo", "").upper() == "NVFP4"
+        self._native_weight_dtype = model_config.dtype
+        self._native_conversion_active = False
+        if self._native_nvfp4_moe:
+            if (
+                checkpoint_quantization.get("moe_quant_format") != "nvfp4-pack-quantized"
+                or checkpoint_quantization.get("group_size") != NVFP4_BLOCK_SIZE
+            ):
+                raise ValueError("Native MiniMax NVFP4 experts require nvfp4-pack-quantized format and group_size=16")
+            if quant_config is None or quant_config.get_name() not in ("mxfp8", "modelopt_mxfp8"):
+                raise ValueError("Native MiniMax NVFP4 experts require Ascend MXFP8 runtime quantization")
         self._enable_aux_hidden_states = (
             vllm_config.speculative_config is not None and vllm_config.speculative_config.method in ("eagle3", "dspark")
         )
@@ -1259,6 +1269,46 @@ class MiniMaxM3Model(nn.Module, EagleModelMixin):
             ckpt_up_proj_name="w3",
             num_experts=self.config.num_local_experts,
         )
+
+    def prepare_weights_for_loading(
+        self, weights: Iterable[tuple[str, torch.Tensor]]
+    ) -> Iterable[tuple[str, torch.Tensor]]:
+        # AutoWeightsLoader can call a child's load_weights multiple times as
+        # checkpoint namespaces interleave across files. Wrap the complete
+        # top-level iterator so completeness is checked after its final shard.
+        if self._native_nvfp4_moe and not getattr(self, "_native_conversion_active", False):
+            expected_prefixes = set()
+            for layer_idx, layer in enumerate(self.layers):
+                if isinstance(layer, PPMissingLayer) or not layer.is_layer_sparse:
+                    continue
+                expert_map = layer.block_sparse_moe.experts.routed_experts.ascend_expert_map
+                if expert_map is None:
+                    local_experts = range(self.config.num_local_experts)
+                else:
+                    # Ascend's placement map is a CPU attribute. Read it once
+                    # during loading, outside the model's forward hot path.
+                    local_experts = [
+                        expert_id
+                        for expert_id, local_id in enumerate(expert_map.tolist()[: self.config.num_local_experts])
+                        if local_id >= 0
+                    ]
+                expected_prefixes.update(
+                    f"layers.{layer_idx}.block_sparse_moe.experts.{expert_id}.{projection}"
+                    for expert_id in local_experts
+                    for projection in ("w1", "w2", "w3")
+                )
+
+            def converted_weights() -> Iterable[tuple[str, torch.Tensor]]:
+                # The VL parent and its CausalLM child share this base model.
+                # A child loader must reuse the parent's conversion stream.
+                self._native_conversion_active = True
+                try:
+                    yield from requantize_minimax_nvfp4_experts(weights, self._native_weight_dtype, expected_prefixes)
+                finally:
+                    self._native_conversion_active = False
+
+            return converted_weights()
+        return weights
 
     def load_weights(self, weights: Iterable[tuple[str, torch.Tensor]]) -> set[str]:
         stacked_params_mapping: list[tuple[str, str, int | str]] = [
@@ -1581,7 +1631,9 @@ class MiniMaxM3SparseForCausalLM(
                 text_tensors += 1
                 yield name, weight
 
-        loaded_params = loader.load_weights(text_weights(), mapper=self.hf_to_vllm_mapper)
+        loaded_params = loader.load_weights(
+            self.model.prepare_weights_for_loading(text_weights()), mapper=self.hf_to_vllm_mapper
+        )
         logger.warning(
             "MiniMax M3 top-level load_weights saw %d checkpoint tensors, "
             "passed %d text tensors, skipped %d multimodal tensors, "

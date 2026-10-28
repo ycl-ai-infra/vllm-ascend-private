@@ -22,16 +22,18 @@ import torch.nn.functional as F
 import torch_npu
 from vllm.config import get_current_vllm_config
 from vllm.logger import logger
+from vllm.model_executor.layers.fused_moe.activation import MoEActivation
 from vllm.model_executor.layers.linear import RowParallelLinear
 from vllm.utils.math_utils import cdiv
 
 from vllm_ascend.ascend_config import get_ascend_config
 from vllm_ascend.ascend_forward_context import _EXTRA_CTX, use_cann_megamoe
+from vllm_ascend.device.device_op import clipped_swiglu_torch
 from vllm_ascend.ops.fused_moe.dataclass.fused_experts import MoEWeights, build_fused_experts_input
 from vllm_ascend.ops.fused_moe.dataclass.moe_mlp import MoEMlpComputeInput
 from vllm_ascend.ops.fused_moe.moe_utils import cumsum_group_list, maybe_normalize_mxfp_scale_layout
 from vllm_ascend.ops.fused_moe.routed_experts import AscendRoutedExperts  # noqa: F401
-from vllm_ascend.quantization.utils import get_dynamic_mx_quant_scale_alg
+from vllm_ascend.quantization.utils import get_dynamic_mx_quant_scale_alg, uses_minimax_mxfp8_fp32_reduction
 from vllm_ascend.utils import FP8_METHOD, dispose_tensor, maybe_trans_nz, maybe_trans_nz_with_scale
 
 from ..base import (
@@ -282,7 +284,7 @@ class AscendW8A8MXFP8DynamicFusedMoEMethod(AscendMoEScheme):
     model_dtype = None
     quant_type: QuantType = QuantType.W8A8MXFP
     act_quant_type: torch.dtype = torch.float8_e4m3fn
-    fused_activations = frozenset({"silu"})
+    fused_activations = frozenset({"silu", "swigluoai_uninterleave"})
     supports_eplb = True
 
     def __init__(self):
@@ -291,6 +293,9 @@ class AscendW8A8MXFP8DynamicFusedMoEMethod(AscendMoEScheme):
         self.group_size = quant_description.get("group_size", 32)
         ascend_config = get_ascend_config()
         self.dynamic_eplb = False if vllm_config.use_v2_model_runner else ascend_config.eplb_config.dynamic_eplb
+        self._use_fp32_moe_output = uses_minimax_mxfp8_fp32_reduction(vllm_config)
+        if self._use_fp32_moe_output:
+            logger.info_once("Native MiniMax MXFP8 uses FP32 GEMM2/route reduction with AllGather communication.")
 
     @staticmethod
     def get_weight(
@@ -526,6 +531,17 @@ class AscendW8A8MXFP8DynamicFusedMoEMethod(AscendMoEScheme):
         layer._mxfp8_transformed = False
 
     def apply_gmm1_act_quant(self, mlp_compute_input: MoEMlpComputeInput):
+        if mlp_compute_input.activation == MoEActivation.SWIGLUOAI_UNINTERLEAVE:
+            # vLLM native MXFP8 quantizes FP32 SwiGLU without a BF16 output cast.
+            hidden_states = clipped_swiglu_torch(
+                self.apply_gmm1(mlp_compute_input),
+                mlp_compute_input.swiglu_limit,
+                mlp_compute_input.swiglu_alpha,
+                mlp_compute_input.swiglu_beta,
+                output_dtype=torch.float32,
+            )
+            return self.apply_act_quant(mlp_compute_input, hidden_states)
+
         hidden_states = mlp_compute_input.hidden_states
         hidden_states, pertoken_scale = self._quant_hidden_states(hidden_states, mlp_compute_input.dynamic_scale)
         layer = mlp_compute_input.layer
@@ -587,6 +603,8 @@ class AscendW8A8MXFP8DynamicFusedMoEMethod(AscendMoEScheme):
             if input_dtype in [torch.bfloat16, torch.float16]
             else (torch.bfloat16 if use_bf16 else torch.float16)
         )
+        if getattr(self, "_use_fp32_moe_output", False):
+            output_dtype = torch.float32
         return torch_npu.npu_grouped_matmul(
             x=[hidden_states],
             weight=[layer.w2_weight],

@@ -34,7 +34,7 @@ from vllm_ascend.lora.fused_moe import prepare_lora_indices
 from vllm_ascend.ops.fused_moe.dataclass.prepare_finalize import MoEPrepareOutput
 from vllm_ascend.ops.fused_moe.moe_utils import _pad_tokens_with_cat
 from vllm_ascend.quantization.quant_type import QuantType
-from vllm_ascend.quantization.utils import get_dynamic_mx_quant_scale_alg
+from vllm_ascend.quantization.utils import get_dynamic_mx_quant_scale_alg, uses_minimax_mxfp8_fp32_reduction
 
 
 class PrepareAndFinalize(ABC):
@@ -370,6 +370,10 @@ class PrepareAndFinalizeWithAllGather(PrepareAndFinalize):
     TP AG → Attn → TP RS → EP AG → MoE → EP RS
     """
 
+    def __init__(self, moe_config: FusedMoEConfig):
+        super().__init__(moe_config)
+        self._use_fp32_moe_output = uses_minimax_mxfp8_fp32_reduction()
+
     def _use_ep_sequence_parallel(self) -> bool:
         """Whether MoE itself must use the EP sequence-parallel path.
 
@@ -531,9 +535,13 @@ class PrepareAndFinalizeWithAllGather(PrepareAndFinalize):
             Tensor with shape [local_num_tokens, hidden_size]
         """
         if self._use_ep_sequence_parallel():
-            return self._finalize_with_ep_group(hidden_states)
-
-        return self._finalize_with_dp_group(hidden_states, reduce_results)
+            hidden_states = self._finalize_with_ep_group(hidden_states)
+        else:
+            hidden_states = self._finalize_with_dp_group(hidden_states, reduce_results)
+        if getattr(self, "_use_fp32_moe_output", False):
+            # Route weighting and the EP collective must both finish in FP32.
+            hidden_states = hidden_states.to(self.moe_config.in_dtype)
+        return hidden_states
 
     def _finalize_with_ep_group(self, hidden_states: torch.Tensor) -> torch.Tensor:
         """

@@ -47,6 +47,27 @@ else:
     triton_q_rms = None  # type: ignore
 
 
+def clipped_swiglu_torch(
+    hidden_states: torch.Tensor,
+    swiglu_limit: float,
+    swiglu_alpha: float,
+    swiglu_beta: float,
+    *,
+    output_dtype: torch.dtype | None = None,
+) -> torch.Tensor:
+    """Match MiniMax native MXFP8 SwiGLU with FP32 intermediates.
+
+    Dense/shared layers round only their output to the model dtype. Routed
+    MXFP8 MoE passes output_dtype=torch.float32 to quantize directly, matching
+    vLLM's native MXFP8 path without an intermediate BF16 round trip.
+    """
+    hidden_size = hidden_states.shape[-1] // 2
+    gate = hidden_states[..., :hidden_size].float().clamp(max=swiglu_limit)
+    up = hidden_states[..., hidden_size:].float().clamp(min=-swiglu_limit, max=swiglu_limit)
+    activated = gate * torch.sigmoid(swiglu_alpha * gate) * (up + swiglu_beta)
+    return activated.to(hidden_states.dtype if output_dtype is None else output_dtype)
+
+
 class BaseDeviceAdaptor:
     @staticmethod
     def get_dsv41_packed_cache_ops() -> type["MixedQuantPackedCacheOps"] | None:
@@ -1466,13 +1487,7 @@ class A5DeviceAdaptor(BaseDeviceAdaptor):
         swiglu_alpha: float,
         swiglu_beta: float,
     ) -> torch.Tensor:
-        hidden_size = hidden_states.shape[-1] // 2
-        gate = hidden_states[..., :hidden_size].clamp(max=swiglu_limit)
-        up = hidden_states[..., hidden_size:].clamp(
-            min=-swiglu_limit,
-            max=swiglu_limit,
-        )
-        return gate * torch.sigmoid(swiglu_alpha * gate) * (up + swiglu_beta)
+        return clipped_swiglu_torch(hidden_states, swiglu_limit, swiglu_alpha, swiglu_beta)
 
     @staticmethod
     def kv_cache_load(cache_kv_c, cache_k_pe, block_table, context_seq_len_npu, seq_offset, key, value):
@@ -1851,7 +1866,7 @@ class A5DeviceAdaptor(BaseDeviceAdaptor):
 
     @staticmethod
     def npu_gemma_rms_norm(x, weight, variance_epsilon):
-        x, _ = torch_npu.npu_rms_norm(x, 1.0 + weight, variance_epsilon)
+        x, _ = torch_npu.npu_rms_norm(x, weight.float() + 1.0, variance_epsilon)
         return x
 
     @staticmethod
