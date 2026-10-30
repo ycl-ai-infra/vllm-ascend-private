@@ -46,7 +46,7 @@ from vllm.utils.import_utils import import_from_path
 
 from vllm_ascend.ascend_forward_context import _EXTRA_CTX
 from vllm_ascend.models.minimax_m3.minimax_m3 import MiniMaxM3SparseForCausalLM
-from vllm_ascend.utils import is_vl_model
+from vllm_ascend.utils import get_rotation_matrix, get_rotation_path, is_vl_model
 
 
 def _load_vllm_minimax_m3_common_module(module_name: str):
@@ -215,6 +215,7 @@ class MiniMaxM3SparseForConditionalGeneration(
         config = vllm_config.model_config.hf_config
         self.config = config
         self.quant_config = vllm_config.quant_config
+        self._vision_rotation_path = get_rotation_path(vllm_config)
         self.model_config = vllm_config.model_config
         self.multimodal_config = vllm_config.model_config.multimodal_config
         self.use_data_parallel = (
@@ -429,6 +430,9 @@ class MiniMaxM3SparseForConditionalGeneration(
 
     def load_weights(self, weights: Iterable[tuple[str, torch.Tensor]]) -> set[str]:
         loader = AutoWeightsLoader(self)
+        rotation = (
+            get_rotation_matrix(self._vision_rotation_path).float() if self._vision_rotation_path is not None else None
+        )
         raw_tensors = 0
         prefix_counts: dict[str, int] = {}
 
@@ -447,6 +451,13 @@ class MiniMaxM3SparseForConditionalGeneration(
                 else:
                     bucket = name.split(".", 1)[0]
                 prefix_counts[bucket] = prefix_counts.get(bucket, 0) + 1
+                if rotation is not None:
+                    # Match visual features to the rotated text embedding basis.
+                    vision_name = name.removeprefix("model.vision_tower.").removeprefix("vision_tower.")
+                    if vision_name == "patch_merge_mlp.linear_2.weight":
+                        weight = (rotation.T @ weight.float()).to(weight.dtype)
+                    elif vision_name == "patch_merge_mlp.linear_2.bias":
+                        weight = (weight.float() @ rotation).to(weight.dtype)
                 yield name, weight
 
         logger.warning("MiniMax M3 VL load_weights entered")
